@@ -9,11 +9,8 @@ __pycache__/
 *.zip
 .DS_Store
 
-# Measurement output — raw captures are redacted before they are committed
-# under assets/, never dropped straight from the device.
-lab/out/
-lab/**/*.csv
-lab/**/*.jsonl
+# Profiler and database output. Raw captures get redacted before anything
+# derived from them is committed — never dropped straight from the device.
 *.nsys-rep
 *.sqlite
 

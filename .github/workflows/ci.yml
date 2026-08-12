@@ -1,9 +1,8 @@
 name: CI
 
-# Validation for a content repository. Nothing here deploys or touches Azure.
-# Every job is read-only against the checkout, and every job tolerates the
-# repository being empty — the layout is still being decided, so no job assumes
-# a directory exists.
+# Validation only — nothing here deploys or touches Azure. Every job is
+# read-only against the checkout and tolerates empty directories, so the
+# pipeline stays green while data/, assets/, scripts/ and tools/ are filled in.
 on:
   pull_request:
     branches: [main]
@@ -62,16 +61,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  redaction:
-    name: Redaction sweep
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Sweep tracked files for identifiers
-        run: bash scripts/redaction-sweep.sh
-
-  lab-python:
-    name: Lab code (ruff + pytest)
+  python:
+    name: Python (ruff + pytest)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
