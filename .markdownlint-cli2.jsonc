@@ -1,0 +1,28 @@
+{
+  "config": {
+    // Prose wraps at whatever the author's editor does; line length is not a
+    // useful gate on long-form content.
+    "MD013": false,
+    // Long-form writing legitimately reuses headings across sibling sections.
+    "MD024": { "siblings_only": true },
+    // Inline HTML is needed for figures and callouts.
+    "MD033": false,
+    // Front matter provides the title; the H1 is rendered by the site.
+    "MD041": false,
+    // Table pipe alignment. Off deliberately: tables get edited constantly and
+    // re-padding every column on each edit is friction with no reader-facing
+    // benefit — the rendered table is identical either way.
+    "MD060": false
+  },
+  // Layout-agnostic on purpose: lint every Markdown file wherever it ends up.
+  "globs": ["**/*.md"],
+  // Local-only mission files (gitignored, never pushed) are skipped so a local
+  // run gives the same result as CI.
+  "ignores": [
+    "**/node_modules/**",
+    ".github/**",
+    "CLAUDE.md",
+    "CLAUDE.local.md",
+    "WS10-verdict-*.md"
+  ]
+}

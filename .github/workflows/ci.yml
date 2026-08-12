@@ -1,0 +1,133 @@
+name: CI
+
+# Validation for a content repository. Nothing here deploys or touches Azure.
+# Every job is read-only against the checkout, and every job tolerates the
+# repository being empty — the layout is still being decided, so no job assumes
+# a directory exists.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege at workflow scope; jobs widen only where they must.
+permissions:
+  contents: read
+
+jobs:
+  markdown:
+    name: Markdown lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Globs and rule config both live in .markdownlint-cli2.jsonc so a local
+      # `npx markdownlint-cli2` run matches CI exactly.
+      - uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff # v24.2.0
+
+  links:
+    name: Link check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          # Retries absorb transient upstream 5xx; a genuine dead link still fails.
+          args: >-
+            --no-progress
+            --max-retries 3
+            --accept 200,206,403,429
+            './**/*.md'
+          fail: true
+          # A repository with no links yet is a legitimate state, not a
+          # misconfiguration. Dead links still fail via `fail: true`.
+          failIfEmpty: false
+
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    # gitleaks-action reads the PR commit list to scope its scan on pull_request.
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  redaction:
+    name: Redaction sweep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Sweep tracked files for identifiers
+        run: bash scripts/redaction-sweep.sh
+
+  lab-python:
+    name: Lab code (ruff + pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Detect Python
+        id: detect
+        run: |
+          if find . -path ./.git -prune -o -name '*.py' -print -quit | grep -q .; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "No Python in the repository yet — nothing to lint or test."
+          fi
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: steps.detect.outputs.present == 'true'
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        if: steps.detect.outputs.present == 'true'
+        run: |
+          python -m pip install --upgrade pip
+          # Lint/test tooling is pinned so an upstream release cannot fail an
+          # unrelated PR.
+          pip install ruff==0.16.2 pytest==9.1.1
+          # Project requirements are picked up wherever the layout puts them.
+          while IFS= read -r req; do
+            echo "Installing $req"
+            pip install -r "$req"
+          done < <(find . -path ./.git -prune -o -name 'requirements.txt' -print)
+      - name: Ruff (lint)
+        if: steps.detect.outputs.present == 'true'
+        run: ruff check .
+      - name: Pytest (unit)
+        if: steps.detect.outputs.present == 'true'
+        run: |
+          set +e
+          pytest
+          code=$?
+          # Exit code 5 is "no tests collected". That is not a failure while the
+          # repository is still being laid out.
+          if [ "$code" -eq 5 ]; then
+            echo "No tests collected."
+            exit 0
+          fi
+          exit "$code"
+
+  shell:
+    name: Shell lint (shellcheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Shellcheck
+        # shellcheck ships on the ubuntu-latest image; no third-party action needed.
+        run: |
+          mapfile -t files < <(find . -path ./.git -prune -o -name '*.sh' -type f -print)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No shell scripts found."
+            exit 0
+          fi
+          shellcheck "${files[@]}"

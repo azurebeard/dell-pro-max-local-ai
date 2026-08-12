@@ -1,0 +1,32 @@
+.env
+.env.*
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.log
+*.zip
+.DS_Store
+
+# Measurement output — raw captures are redacted before they are committed
+# under assets/, never dropped straight from the device.
+lab/out/
+lab/**/*.csv
+lab/**/*.jsonl
+*.nsys-rep
+*.sqlite
+
+# Local model weights and caches must never enter the repo.
+models/
+*.gguf
+*.safetensors
+
+# Internal mission material. This repository is public — the mission brief and
+# review verdicts reference private repos, personas and workspace paths, and
+# stay local.
+CLAUDE.md
+CLAUDE.local.md
+WS10-verdict-*.md
+.serena/
+.mcp.json
